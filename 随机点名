@@ -1,0 +1,1159 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="theme-color" content="#667eea">
+<meta name="description" content="校园点名系统 - 支持随机/顺序点名、微信成员导入、Excel报表导出">
+<title>校园点名系统</title>
+
+<!-- ============ SheetJS 多 CDN 自动降级加载器 ============ -->
+<script>
+(function () {
+  var CDNS = [
+    'https://cdn.staticfile.org/xlsx/0.18.5/xlsx.full.min.js',
+    'https://cdn.bootcdn.net/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://lib.baomitu.com/xlsx/0.18.5/xlsx.full.min.js',
+    'https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js',
+    'https://unpkg.com/xlsx@0.18.5/dist/xlsx.full.min.js',
+    'https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js'
+  ];
+  var idx = 0, loaded = false;
+  function tryNext() {
+    if (loaded || idx >= CDNS.length) {
+      if (!loaded) {
+        console.warn('[SheetJS] 所有 CDN 均加载失败，将启用 CSV 兜底解析');
+        window.__XLSX_LOAD_FAILED__ = true;
+      }
+      return;
+    }
+    var url = CDNS[idx++];
+    var s = document.createElement('script');
+    s.src = url; s.async = false;
+    var timer = setTimeout(function () {
+      s.onerror = s.onload = null; s.remove(); tryNext();
+    }, 4000);
+    s.onload = function () {
+      clearTimeout(timer);
+      if (window.XLSX) { loaded = true; console.log('[SheetJS] 加载成功：' + url); }
+      else tryNext();
+    };
+    s.onerror = function () { clearTimeout(timer); s.remove(); tryNext(); };
+    document.head.appendChild(s);
+  }
+  tryNext();
+})();
+</script>
+
+<style>
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;padding:0}
+body{
+  font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Microsoft YaHei",sans-serif;
+  background:#f2f4f8;color:#1f2937;padding-bottom:76px;font-size:15px;
+  -webkit-font-smoothing:antialiased;
+}
+.app{max-width:620px;margin:0 auto;min-height:100vh;background:#f2f4f8;position:relative}
+
+.header{
+  background:linear-gradient(135deg,#667eea 0%,#764ba2 100%);
+  color:#fff;padding:20px 20px 24px;border-radius:0 0 22px 22px;
+  position:sticky;top:0;z-index:50;box-shadow:0 4px 14px rgba(102,126,234,.25);
+}
+.header h1{margin:0;font-size:19px;font-weight:700;letter-spacing:.5px;display:flex;align-items:center;gap:8px}
+.header .sub{margin-top:6px;font-size:12.5px;opacity:.85}
+
+.content{padding:14px}
+.page{display:none}
+.page.active{display:block;animation:fade .22s ease}
+@keyframes fade{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+
+.card{background:#fff;border-radius:16px;padding:16px;margin-bottom:14px;box-shadow:0 1px 4px rgba(17,24,39,.06)}
+.card-title{font-size:15px;font-weight:600;margin-bottom:12px;display:flex;align-items:center;gap:6px;color:#111827}
+.card-title .tip{font-size:11.5px;font-weight:400;color:#9ca3af;margin-left:auto}
+
+.btn{border:none;border-radius:10px;padding:10px 16px;font-size:14px;font-weight:500;cursor:pointer;
+     transition:transform .12s,background .15s;font-family:inherit}
+.btn:active{transform:scale(.97)}
+.btn-primary{background:#667eea;color:#fff}
+.btn-primary:active{background:#5568d3}
+.btn-ghost{background:#f3f4f6;color:#4b5563}
+.btn-danger{background:#fee2e2;color:#dc2626}
+.btn-sm{padding:7px 12px;font-size:13px;border-radius:8px}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+
+.mode-switch{display:flex;gap:8px;background:#fff;padding:6px;border-radius:14px;margin-bottom:14px;
+             box-shadow:0 1px 4px rgba(17,24,39,.06)}
+.mode-btn{flex:1;border:none;background:transparent;padding:11px 4px;border-radius:10px;
+          font-size:14px;font-weight:500;color:#6b7280;cursor:pointer;font-family:inherit;transition:.18s}
+.mode-btn.active{background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;
+                 box-shadow:0 3px 10px rgba(102,126,234,.35)}
+
+.pick-card{
+  background:#fff;border-radius:20px;padding:34px 18px;text-align:center;
+  margin-bottom:14px;min-height:158px;display:flex;flex-direction:column;
+  justify-content:center;align-items:center;box-shadow:0 2px 12px rgba(17,24,39,.07);
+  position:relative;overflow:hidden;
+}
+.pick-card::before{content:"";position:absolute;inset:0;
+  background:radial-gradient(circle at 50% 0%,rgba(102,126,234,.09),transparent 70%);pointer-events:none}
+.pick-name{
+  font-size:42px;font-weight:800;line-height:1.15;word-break:break-all;
+  color:#4a5bd0;letter-spacing:1px;
+}
+.pick-name.pop{animation:pop .42s cubic-bezier(.34,1.56,.64,1)}
+@keyframes pop{0%{transform:scale(.5);opacity:0}60%{transform:scale(1.08)}100%{transform:scale(1);opacity:1}}
+.pick-meta{margin-top:10px;font-size:13px;color:#9ca3af;min-height:18px}
+
+.big-btn{
+  width:100%;padding:19px;border:none;border-radius:16px;
+  background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;
+  font-size:18px;font-weight:700;letter-spacing:1px;cursor:pointer;
+  box-shadow:0 7px 18px rgba(102,126,234,.36);margin-bottom:14px;
+  transition:transform .12s;font-family:inherit;
+}
+.big-btn:active{transform:scale(.98)}
+
+.status-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px;
+             opacity:0;pointer-events:none;transition:opacity .2s;transform:translateY(6px)}
+.status-grid.show{opacity:1;pointer-events:auto;transform:none}
+.status-btn{
+  border:none;border-radius:12px;padding:13px 2px;font-size:13px;font-weight:600;
+  cursor:pointer;font-family:inherit;display:flex;flex-direction:column;
+  align-items:center;gap:4px;transition:transform .12s;
+}
+.status-btn:active{transform:scale(.94)}
+.status-btn .ico{font-size:19px;line-height:1}
+.st-present{background:#dcfce7;color:#15803d}
+.st-absent{background:#fee2e2;color:#b91c1c}
+.st-late{background:#fef3c7;color:#b45309}
+.st-leave{background:#e0e7ff;color:#4338ca}
+
+.mini-stats{display:flex;justify-content:space-around;background:#fff;border-radius:14px;
+            padding:13px 6px;margin-bottom:14px;box-shadow:0 1px 4px rgba(17,24,39,.06)}
+.mini-stats div{text-align:center;flex:1}
+.mini-stats .n{font-size:19px;font-weight:700;color:#4a5bd0;line-height:1.2}
+.mini-stats .l{font-size:11px;color:#9ca3af;margin-top:3px}
+
+.hist-item{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid #f3f4f6}
+.hist-item:last-child{border-bottom:none}
+.hist-name{font-weight:600;font-size:14.5px;flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.hist-time{font-size:11px;color:#9ca3af}
+.badge{font-size:11.5px;padding:3px 9px;border-radius:20px;font-weight:600;white-space:nowrap}
+.b-present{background:#dcfce7;color:#15803d}
+.b-absent{background:#fee2e2;color:#b91c1c}
+.b-late{background:#fef3c7;color:#b45309}
+.b-leave{background:#e0e7ff;color:#4338ca}
+.b-none{background:#f3f4f6;color:#9ca3af}
+
+.field{display:flex;flex-direction:column;gap:5px;margin-bottom:10px}
+.field label{font-size:12.5px;color:#6b7280;font-weight:500}
+input[type=text],input[type=search],textarea,select{
+  width:100%;border:1.5px solid #e5e7eb;border-radius:10px;padding:11px 13px;
+  font-size:14px;font-family:inherit;background:#fafbfc;outline:none;transition:.16s;color:#1f2937;
+}
+input:focus,textarea:focus,select:focus{border-color:#667eea;background:#fff;box-shadow:0 0 0 3px rgba(102,126,234,.11)}
+textarea{resize:vertical;min-height:110px;line-height:1.6}
+.row{display:flex;gap:8px}
+.row>*{flex:1}
+
+.stu-item{display:flex;align-items:center;gap:10px;padding:11px 0;border-bottom:1px solid #f3f4f6}
+.stu-item:last-child{border-bottom:none}
+.avatar{width:36px;height:36px;border-radius:50%;flex-shrink:0;
+        background:linear-gradient(135deg,#667eea,#764ba2);color:#fff;
+        display:flex;align-items:center;justify-content:center;font-size:14px;font-weight:600}
+.stu-info{flex:1;min-width:0}
+.stu-name{font-weight:600;font-size:14.5px;display:flex;align-items:center;gap:6px}
+.stu-sub{font-size:11.5px;color:#9ca3af;margin-top:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.icon-btn{border:none;background:transparent;font-size:17px;cursor:pointer;padding:6px;
+          border-radius:8px;line-height:1;color:#9ca3af;transition:.15s}
+.icon-btn:active{background:#f3f4f6}
+
+.prev-item{display:flex;align-items:center;gap:9px;padding:7px 0;border-bottom:1px solid #f3f4f6}
+.prev-item:last-child{border-bottom:none}
+.prev-item input[type=checkbox]{width:19px;height:19px;flex-shrink:0;accent-color:#667eea;cursor:pointer}
+.prev-item input[type=text]{padding:8px 11px;font-size:13.5px}
+
+.stat-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:9px}
+.stat-box{background:#f8f9fc;border-radius:12px;padding:13px 6px;text-align:center}
+.stat-box .num{font-size:22px;font-weight:700;color:#4a5bd0;line-height:1.15}
+.stat-box .lbl{font-size:11.5px;color:#9ca3af;margin-top:4px}
+
+.tabbar{
+  position:fixed;bottom:0;left:0;right:0;background:#fff;
+  border-top:1px solid #eceef2;display:flex;z-index:100;
+  padding:5px 0 max(5px,env(safe-area-inset-bottom));
+  box-shadow:0 -2px 12px rgba(17,24,39,.05);
+}
+.tabbar-inner{display:flex;width:100%;max-width:620px;margin:0 auto}
+.tab-btn{
+  flex:1;background:none;border:none;padding:6px 0;font-size:10.5px;color:#9ca3af;
+  display:flex;flex-direction:column;align-items:center;gap:2px;cursor:pointer;
+  font-family:inherit;transition:.16s;
+}
+.tab-btn .ico{font-size:21px;line-height:1;transition:transform .18s}
+.tab-btn.active{color:#667eea;font-weight:600}
+.tab-btn.active .ico{transform:translateY(-2px) scale(1.08)}
+
+.empty{text-align:center;padding:30px 16px;color:#c1c6d0;font-size:13px}
+.empty .ico{font-size:38px;display:block;margin-bottom:10px;opacity:.55}
+
+.toast{
+  position:fixed;left:50%;bottom:100px;transform:translateX(-50%) translateY(14px);
+  background:rgba(31,41,55,.93);color:#fff;padding:11px 22px;border-radius:24px;
+  font-size:13.5px;z-index:9999;opacity:0;pointer-events:none;transition:.24s;
+  max-width:82vw;text-align:center;backdrop-filter:blur(6px);
+}
+.toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+
+.switch-row{display:flex;align-items:center;justify-content:space-between;padding:10px 0;
+            border-bottom:1px solid #f3f4f6;font-size:14px}
+.switch-row:last-child{border-bottom:none}
+.switch{position:relative;width:46px;height:26px;flex-shrink:0}
+.switch input{opacity:0;width:0;height:0}
+.slider{position:absolute;inset:0;background:#d1d5db;border-radius:26px;cursor:pointer;transition:.24s}
+.slider::before{content:"";position:absolute;height:20px;width:20px;left:3px;bottom:3px;
+                background:#fff;border-radius:50%;transition:.24s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.switch input:checked + .slider{background:#667eea}
+.switch input:checked + .slider::before{transform:translateX(20px)}
+
+.divider{height:1px;background:#f3f4f6;margin:14px 0}
+.help{font-size:12px;color:#9ca3af;line-height:1.75;margin-top:8px}
+.help b{color:#6b7280}
+</style>
+</head>
+<body>
+<div class="app">
+
+  <header class="header">
+    <h1>🎓 校园点名系统</h1>
+    <div class="sub" id="headerSub">共 0 名学生 · 本轮已点 0 人</div>
+  </header>
+
+  <main class="content">
+
+    <!-- ============ 页面1：点名 ============ -->
+    <section class="page active" id="page-call">
+      <div class="mode-switch">
+        <button class="mode-btn active" data-mode="random">🎲 随机点名</button>
+        <button class="mode-btn" data-mode="sequential">📋 顺序点名</button>
+      </div>
+
+      <div class="pick-card">
+        <div class="pick-name" id="pickName">准备就绪</div>
+        <div class="pick-meta" id="pickMeta">点击下方按钮开始点名</div>
+      </div>
+
+      <button class="big-btn" id="pickBtn">开 始 点 名</button>
+
+      <div class="status-grid" id="statusGrid">
+        <button class="status-btn st-present" data-status="present"><span class="ico">✅</span>出勤</button>
+        <button class="status-btn st-absent"  data-status="absent"><span class="ico">❌</span>缺勤</button>
+        <button class="status-btn st-late"    data-status="late"><span class="ico">⏰</span>迟到</button>
+        <button class="status-btn st-leave"   data-status="leave"><span class="ico">📝</span>请假</button>
+      </div>
+
+      <div class="mini-stats">
+        <div><div class="n" id="msPicked">0</div><div class="l">已点名</div></div>
+        <div><div class="n" id="msTotal">0</div><div class="l">学生总数</div></div>
+        <div><div class="n" id="msLeft">0</div><div class="l">剩余</div></div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">⚙️ 设置 <span class="tip">可随时调整</span></div>
+        <div class="switch-row">
+          <span>标记后自动抽下一位</span>
+          <label class="switch"><input type="checkbox" id="autoNext" checked><span class="slider"></span></label>
+        </div>
+        <div class="switch-row">
+          <span>语音播报姓名</span>
+          <label class="switch"><input type="checkbox" id="voiceOn"><span class="slider"></span></label>
+        </div>
+        <div class="divider"></div>
+        <button class="btn btn-ghost btn-sm" id="resetRound" style="width:100%">🔄 开始新一轮（清空本轮记录）</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📜 本轮点名记录 <span class="tip" id="histCount">0 条</span></div>
+        <div id="historyList"></div>
+      </div>
+    </section>
+
+    <!-- ============ 页面2：学生管理 ============ -->
+    <section class="page" id="page-students">
+      <div class="card">
+        <div class="card-title">➕ 手动添加学生</div>
+        <div class="row">
+          <div class="field"><label>姓名 *</label><input type="text" id="addName" placeholder="张三"></div>
+          <div class="field"><label>学号</label><input type="text" id="addNo" placeholder="2024001"></div>
+        </div>
+        <div class="field"><label>班级 / 小组（可选）</label><input type="text" id="addClass" placeholder="计算机2401班"></div>
+        <button class="btn btn-primary" id="addBtn" style="width:100%">添加到名单</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">👥 学生名单 <span class="tip" id="stuCount">0 人</span></div>
+        <input type="search" id="stuSearch" placeholder="🔍 搜索姓名 / 学号 / 班级" style="margin-bottom:10px">
+        <div id="studentList"></div>
+        <div class="divider"></div>
+        <div class="row">
+          <button class="btn btn-ghost btn-sm" id="exportStuBtn">导出名单</button>
+          <button class="btn btn-danger btn-sm" id="clearStuBtn">清空全部学生</button>
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 页面3：导入 ============ -->
+    <section class="page" id="page-import">
+
+      <div class="card">
+        <div class="card-title">💬 微信群成员导入 <span class="tip">核心功能</span></div>
+        <div class="help" style="margin-top:0;margin-bottom:10px">
+          <b>操作步骤：</b><br>
+          1. 电脑微信打开群聊 → 点击「群成员」列表<br>
+          2. 框选并复制成员昵称（或逐段复制）<br>
+          3. 粘贴到下方文本框 → 点击「智能解析」<br>
+          4. 勾选/修改后确认导入（自动去重）
+        </div>
+        <textarea id="wechatText" placeholder="在此粘贴群成员文本，每行一个，例如：&#10;张三&#10;李四(班长)&#10;2024003 王五&#10;..."></textarea>
+        <div class="row" style="margin-top:10px">
+          <button class="btn btn-primary" id="parseWechatBtn">🔍 智能解析</button>
+          <button class="btn btn-ghost" id="clearWechatBtn">清空</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📊 Excel / CSV 名单导入</div>
+        <div class="help" style="margin-top:0;margin-bottom:10px">
+          支持格式：<b>.xlsx / .xls / .csv</b><br>
+          表头需包含：<b>姓名</b>（必需）、<b>学号</b>、<b>班级</b>。无表头时默认第一列为姓名。
+        </div>
+        <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="display:none">
+        <button class="btn btn-primary" id="excelBtn" style="width:100%">📁 选择文件导入</button>
+        <div id="xlsxStatus" class="help" style="margin-top:8px"></div>
+      </div>
+
+      <div class="card" id="previewCard" style="display:none">
+        <div class="card-title">✅ 解析结果预览 <span class="tip" id="prevCount">0 条</span></div>
+        <div class="help" style="margin-top:0;margin-bottom:10px">
+          取消勾选可过滤非学生账号；可直接修改姓名。
+        </div>
+        <div id="importPreview" style="max-height:340px;overflow-y:auto"></div>
+        <div class="divider"></div>
+        <div class="row">
+          <button class="btn btn-ghost btn-sm" id="prevAll">全选</button>
+          <button class="btn btn-ghost btn-sm" id="prevNone">全不选</button>
+          <button class="btn btn-primary btn-sm" id="confirmImport">确认导入</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">🛡️ 隐私与合规提示</div>
+        <div class="help" style="margin-top:0">
+          · 本系统<b>不上传任何数据到服务器</b>，所有学生信息仅保存在你的浏览器本地（localStorage）。<br>
+          · 微信群成员通过<b>你手动复制粘贴</b>的文本解析，不读取微信数据、不索取微信账号权限。<br>
+          · 建议在导入前告知学生名单用途，仅收集姓名/学号等必要信息。<br>
+          · 学期结束后可在「学生管理」中一键清空全部数据。
+        </div>
+      </div>
+    </section>
+
+    <!-- ============ 页面4：报表 ============ -->
+    <section class="page" id="page-report">
+      <div class="card">
+        <div class="card-title">📊 本轮出勤统计</div>
+        <div class="stat-grid">
+          <div class="stat-box"><div class="num" id="rPicked">0</div><div class="lbl">已点名</div></div>
+          <div class="stat-box"><div class="num" id="rPresent">0</div><div class="lbl">出勤</div></div>
+          <div class="stat-box"><div class="num" id="rAbsent">0</div><div class="lbl">缺勤</div></div>
+          <div class="stat-box"><div class="num" id="rLate">0</div><div class="lbl">迟到</div></div>
+          <div class="stat-box"><div class="num" id="rLeave">0</div><div class="lbl">请假</div></div>
+          <div class="stat-box"><div class="num" id="rNone">0</div><div class="lbl">未标记</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📥 导出报表</div>
+        <div class="help" style="margin-top:0;margin-bottom:12px">
+          导出内容包含 <b>「出勤报表」</b> 与 <b>「汇总」</b> 两个工作表。未被点到的学生也会列入，标记为「未点名」。
+        </div>
+        <button class="btn btn-primary" id="exportBtn" style="width:100%;padding:14px;font-size:15px">📊 导出出勤报表</button>
+      </div>
+
+      <div class="card">
+        <div class="card-title">📋 全部记录 <span class="tip" id="recCount">0 条</span></div>
+        <div id="recordList"></div>
+        <div class="divider"></div>
+        <button class="btn btn-danger btn-sm" id="clearRecords" style="width:100%">清空本轮记录</button>
+      </div>
+    </section>
+
+  </main>
+
+  <nav class="tabbar">
+    <div class="tabbar-inner">
+      <button class="tab-btn active" data-page="call"><span class="ico">🎯</span>点名</button>
+      <button class="tab-btn" data-page="students"><span class="ico">👥</span>学生</button>
+      <button class="tab-btn" data-page="import"><span class="ico">📥</span>导入</button>
+      <button class="tab-btn" data-page="report"><span class="ico">📊</span>报表</button>
+    </div>
+  </nav>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* =========================================================
+   校园点名系统 —— 纯前端实现
+   数据保存在浏览器 localStorage，不上传任何服务器
+   ========================================================= */
+
+const STORAGE_KEY = 'campus_rollcall_v1';
+const STATUS_MAP = {
+  present: { text: '出勤', cls: 'b-present', emoji: '✅' },
+  absent:  { text: '缺勤', cls: 'b-absent',  emoji: '❌' },
+  late:    { text: '迟到', cls: 'b-late',    emoji: '⏰' },
+  leave:   { text: '请假', cls: 'b-leave',   emoji: '📝' }
+};
+
+let students = [];
+let records = [];
+let mode = 'random';
+let pickedIds = [];
+let currentStudentId = null;
+let currentRecordId = null;
+let importPreview = [];
+
+const $  = s => document.querySelector(s);
+const $$ = s => Array.from(document.querySelectorAll(s));
+
+function uid() { return Date.now().toString(36) + Math.random().toString(36).slice(2, 7); }
+function nowStr() {
+  const d = new Date(), p = n => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${p(d.getMonth()+1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+}
+function escapeHtml(s) {
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;', '<':'&lt;', '>':'&gt;', '"':'&quot;', "'":'&#39;' }[c]));
+}
+let toastTimer = null;
+function toast(msg, duration = 1900) {
+  const el = $('#toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), duration);
+}
+
+function save() {
+  try { localStorage.setItem(STORAGE_KEY, JSON.stringify({ students, records, mode, pickedIds })); }
+  catch (e) { console.warn('保存失败', e); }
+}
+function load() {
+  try {
+    const raw = localStorage.getItem(STORAGE_KEY);
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    students  = Array.isArray(d.students) ? d.students : [];
+    records   = Array.isArray(d.records)  ? d.records  : [];
+    mode      = d.mode === 'sequential' ? 'sequential' : 'random';
+    pickedIds = Array.isArray(d.pickedIds) ? d.pickedIds : [];
+  } catch (e) { console.warn('读取失败', e); }
+}
+
+/* ================= 点名核心 ================= */
+function doPick() {
+  if (students.length === 0) {
+    toast('请先添加或导入学生名单');
+    switchPage('students');
+    return;
+  }
+  const remaining = students.filter(s => !pickedIds.includes(s.id));
+  if (remaining.length === 0) {
+    if (confirm('本轮所有学生都已点过，是否开始新一轮？')) {
+      pickedIds = []; currentStudentId = null; currentRecordId = null;
+      save(); doPick();
+    }
+    return;
+  }
+  const student = mode === 'random'
+    ? remaining[Math.floor(Math.random() * remaining.length)]
+    : remaining[0];
+
+  pickedIds.push(student.id);
+  currentStudentId = student.id;
+
+  const rec = {
+    id: uid(), studentId: student.id, name: student.name,
+    studentNo: student.studentNo || '', className: student.className || '',
+    mode, status: null, time: nowStr()
+  };
+  records.push(rec);
+  currentRecordId = rec.id;
+
+  showCurrent(student);
+  speak(student.name);
+  renderAll();
+}
+
+function showCurrent(student) {
+  const nameEl = $('#pickName');
+  nameEl.textContent = student.name;
+  nameEl.classList.remove('pop');
+  void nameEl.offsetWidth;
+  nameEl.classList.add('pop');
+
+  const metaParts = [];
+  if (student.studentNo) metaParts.push('学号：' + student.studentNo);
+  if (student.className) metaParts.push(student.className);
+  $('#pickMeta').textContent = metaParts.length ? metaParts.join(' · ') : '请选择出勤状态';
+
+  $('#statusGrid').classList.add('show');
+  $('#pickBtn').textContent = '下 一 位 →';
+}
+
+function markStatus(status) {
+  if (!currentRecordId) { toast('请先点名'); return; }
+  const rec = records.find(r => r.id === currentRecordId);
+  if (!rec) return;
+  rec.status = status;
+  const info = STATUS_MAP[status];
+  toast(`${rec.name} 已标记为「${info.text}」`);
+  renderAll();
+
+  if ($('#autoNext').checked) {
+    setTimeout(() => {
+      if (students.filter(s => !pickedIds.includes(s.id)).length > 0) {
+        doPick();
+      } else {
+        $('#pickBtn').textContent = '本 轮 已 完 成';
+        $('#statusGrid').classList.remove('show');
+      }
+    }, 380);
+  }
+}
+
+function resetRound() {
+  if (records.length === 0 && pickedIds.length === 0) { toast('当前没有记录'); return; }
+  if (!confirm('确定要清空本轮点名记录并重新开始吗？')) return;
+  records = []; pickedIds = [];
+  currentStudentId = null; currentRecordId = null;
+  $('#pickName').textContent = '准备就绪';
+  $('#pickMeta').textContent = '点击下方按钮开始点名';
+  $('#pickBtn').textContent = '开 始 点 名';
+  $('#statusGrid').classList.remove('show');
+  save(); renderAll();
+  toast('已开始新一轮');
+}
+
+function speak(text) {
+  if (!$('#voiceOn').checked) return;
+  try {
+    if (!('speechSynthesis' in window)) return;
+    speechSynthesis.cancel();
+    const u = new SpeechSynthesisUtterance(text);
+    u.lang = 'zh-CN'; u.rate = 0.95; u.pitch = 1.05;
+    speechSynthesis.speak(u);
+  } catch (e) {}
+}
+
+/* ================= 渲染 ================= */
+function renderAll() {
+  renderHeader(); renderMiniStats(); renderHistory();
+  renderStudents(); renderReport();
+  save();
+}
+function renderHeader() {
+  $('#headerSub').textContent = `共 ${students.length} 名学生 · 本轮已点 ${pickedIds.length} 人`;
+}
+function renderMiniStats() {
+  $('#msPicked').textContent = pickedIds.length;
+  $('#msTotal').textContent  = students.length;
+  $('#msLeft').textContent   = Math.max(0, students.length - pickedIds.length);
+}
+function renderHistory() {
+  const box = $('#historyList');
+  $('#histCount').textContent = records.length + ' 条';
+  if (records.length === 0) {
+    box.innerHTML = '<div class="empty"><span class="ico">📭</span>还没有点名记录</div>';
+    return;
+  }
+  const list = records.slice().reverse();
+  box.innerHTML = list.map(r => {
+    const st = r.status ? STATUS_MAP[r.status] : { text: '未标记', cls: 'b-none' };
+    const modeTxt = r.mode === 'random' ? '随机' : '顺序';
+    return `<div class="hist-item">
+      <div class="hist-name">${escapeHtml(r.name)}
+        <span style="font-size:11px;color:#c1c6d0;font-weight:400"> · ${modeTxt}</span>
+      </div>
+      <div class="hist-time">${r.time.slice(11, 16)}</div>
+      <span class="badge ${st.cls}">${st.text}</span>
+    </div>`;
+  }).join('');
+}
+function renderStudents() {
+  const kw = ($('#stuSearch').value || '').trim().toLowerCase();
+  const list = kw
+    ? students.filter(s =>
+        (s.name || '').toLowerCase().includes(kw) ||
+        (s.studentNo || '').toLowerCase().includes(kw) ||
+        (s.className || '').toLowerCase().includes(kw))
+    : students;
+
+  $('#stuCount').textContent = students.length + ' 人';
+  const box = $('#studentList');
+  if (list.length === 0) {
+    box.innerHTML = `<div class="empty"><span class="ico">${students.length ? '🔍' : '👤'}</span>${
+      students.length ? '没有匹配的学生' : '还没有学生，去「导入」页添加吧'}</div>`;
+    return;
+  }
+  box.innerHTML = list.map(s => {
+    const initial = (s.name || '?').slice(0, 1);
+    const sub = [s.studentNo ? '学号 ' + s.studentNo : '', s.className || '']
+      .filter(Boolean).join(' · ') || '未填写学号/班级';
+    return `<div class="stu-item">
+      <div class="avatar">${escapeHtml(initial)}</div>
+      <div class="stu-info">
+        <div class="stu-name">${escapeHtml(s.name)}</div>
+        <div class="stu-sub">${escapeHtml(sub)}</div>
+      </div>
+      <button class="icon-btn" data-edit="${s.id}" title="编辑">✏️</button>
+      <button class="icon-btn" data-del="${s.id}" title="删除">🗑️</button>
+    </div>`;
+  }).join('');
+}
+function renderReport() {
+  const counts = { present: 0, absent: 0, late: 0, leave: 0, none: 0 };
+  records.forEach(r => {
+    if (r.status && counts[r.status] !== undefined) counts[r.status]++;
+    else counts.none++;
+  });
+  $('#rPicked').textContent  = records.length;
+  $('#rPresent').textContent = counts.present;
+  $('#rAbsent').textContent  = counts.absent;
+  $('#rLate').textContent    = counts.late;
+  $('#rLeave').textContent   = counts.leave;
+  $('#rNone').textContent    = counts.none;
+  $('#recCount').textContent = records.length + ' 条';
+
+  const box = $('#recordList');
+  if (records.length === 0) {
+    box.innerHTML = '<div class="empty"><span class="ico">📋</span>暂无点名记录</div>';
+    return;
+  }
+  box.innerHTML = records.slice().reverse().map(r => {
+    const st = r.status ? STATUS_MAP[r.status] : { text: '未标记', cls: 'b-none' };
+    return `<div class="hist-item">
+      <div class="hist-name">${escapeHtml(r.name)}
+        ${r.studentNo ? `<span style="font-size:11px;color:#c1c6d0;font-weight:400"> ${escapeHtml(r.studentNo)}</span>` : ''}
+      </div>
+      <div class="hist-time">${r.time.slice(5, 16)}</div>
+      <span class="badge ${st.cls}">${st.text}</span>
+    </div>`;
+  }).join('');
+}
+
+/* ================= 学生管理 ================= */
+function addStudent() {
+  const name = $('#addName').value.trim();
+  if (!name) { toast('请填写姓名'); return; }
+  if (students.some(s => s.name === name && s.studentNo === $('#addNo').value.trim())) {
+    toast('该学生已存在'); return;
+  }
+  students.push({
+    id: uid(), name,
+    studentNo: $('#addNo').value.trim(),
+    className: $('#addClass').value.trim()
+  });
+  $('#addName').value = ''; $('#addNo').value = '';
+  save(); renderAll();
+  toast('已添加：' + name);
+}
+function deleteStudent(id) {
+  const s = students.find(x => x.id === id);
+  if (!s) return;
+  if (!confirm(`确定删除「${s.name}」吗？`)) return;
+  students = students.filter(x => x.id !== id);
+  pickedIds = pickedIds.filter(x => x !== id);
+  save(); renderAll();
+  toast('已删除');
+}
+function editStudent(id) {
+  const s = students.find(x => x.id === id);
+  if (!s) return;
+  const name = prompt('修改姓名：', s.name);
+  if (name === null) return;
+  if (!name.trim()) { toast('姓名不能为空'); return; }
+  const no = prompt('修改学号（可留空）：', s.studentNo || '');
+  const cls = prompt('修改班级/小组（可留空）：', s.className || '');
+  s.name = name.trim();
+  if (no !== null) s.studentNo = no.trim();
+  if (cls !== null) s.className = cls.trim();
+  records.forEach(r => {
+    if (r.studentId === id) {
+      r.name = s.name; r.studentNo = s.studentNo; r.className = s.className;
+    }
+  });
+  save(); renderAll();
+  toast('已更新');
+}
+function clearStudents() {
+  if (students.length === 0) { toast('名单已经是空的'); return; }
+  if (!confirm(`确定清空全部 ${students.length} 名学生吗？此操作不可撤销。`)) return;
+  students = []; pickedIds = []; records = [];
+  currentStudentId = null; currentRecordId = null;
+  $('#pickName').textContent = '准备就绪';
+  $('#pickMeta').textContent = '点击下方按钮开始点名';
+  $('#pickBtn').textContent = '开 始 点 名';
+  $('#statusGrid').classList.remove('show');
+  save(); renderAll();
+  toast('已清空全部数据');
+}
+
+/* ================= 微信群文本解析 ================= */
+function parseWechatMembers(rawText) {
+  const lines = String(rawText).split(/\r?\n/);
+  const seen = new Set();
+  const result = [];
+  const skipExact = [
+    '群成员','群聊成员','查看更多','展开','收起','返回','确定','取消',
+    '删除','添加','移出','设置','聊天信息','群公告','公告','群主',
+    '管理员','老师','班主任','辅导员','任课老师','所有人'
+  ];
+  for (let raw of lines) {
+    let line = String(raw).trim();
+    if (!line) continue;
+    if (/^[\d\s\.、,，\-—_]+$/.test(line)) continue;
+    if (skipExact.includes(line)) continue;
+    if (/^(群成员|群聊成员)\s*[（(]?\d*[)）]?$/.test(line)) continue;
+    if (/^(共)?\s*\d+\s*(人|位成员)$/.test(line)) continue;
+    if (/^\d+\s*人$/.test(line)) continue;
+
+    line = line.replace(/^\d+\s*[\.、\)）]\s*/, '');
+    let name = line
+      .replace(/[（(][^（()）]*[)）]/g, '')
+      .replace(/\[[^\]]*\]/g, '')
+      .replace(/【[^】]*】/g, '');
+    if (!name.trim()) name = line;
+
+    name = name.replace(/[^\u4e00-\u9fa5a-zA-Z0-9·\s]/g, '').replace(/\s+/g, '').trim();
+    if (name.length < 2 || name.length > 20) continue;
+    if (/^\d+$/.test(name)) continue;
+    if (/^[a-zA-Z0-9_]{15,}$/.test(name)) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    result.push({ name, raw: line, checked: true });
+  }
+  return result;
+}
+function renderImportPreview() {
+  const card = $('#previewCard');
+  const box = $('#importPreview');
+  if (importPreview.length === 0) { card.style.display = 'none'; return; }
+  card.style.display = 'block';
+  $('#prevCount').textContent = importPreview.length + ' 条';
+  box.innerHTML = importPreview.map((item, i) => `
+    <div class="prev-item">
+      <input type="checkbox" data-idx="${i}" data-act="check" ${item.checked ? 'checked' : ''}>
+      <input type="text" data-idx="${i}" data-act="name" value="${escapeHtml(item.name)}">
+    </div>
+  `).join('');
+}
+function confirmImport() {
+  const chosen = importPreview.filter(x => x.checked && x.name.trim());
+  if (chosen.length === 0) { toast('没有勾选任何成员'); return; }
+  const existingNames = new Set(students.map(s => s.name));
+  let added = 0, skipped = 0;
+  chosen.forEach(item => {
+    const name = item.name.trim();
+    if (existingNames.has(name)) { skipped++; return; }
+    students.push({ id: uid(), name, studentNo: '', className: '' });
+    existingNames.add(name);
+    added++;
+  });
+  importPreview = [];
+  $('#wechatText').value = '';
+  renderImportPreview(); save(); renderAll();
+  toast(`成功导入 ${added} 人${skipped ? `，跳过重复 ${skipped} 人` : ''}`);
+}
+
+/* ================= Excel / CSV 导入 ================= */
+function handleExcelFile(file) {
+  const fname = file.name.toLowerCase();
+  const isCsv = fname.endsWith('.csv');
+
+  // 情况 A：XLSX 已就绪
+  if (typeof XLSX !== 'undefined') {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const data = new Uint8Array(e.target.result);
+        const wb = XLSX.read(data, { type: 'array' });
+        const ws = wb.Sheets[wb.SheetNames[0]];
+        const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+        importRowsFromArray(rows, file.name);
+      } catch (err) {
+        console.error(err);
+        toast('文件解析失败：' + err.message);
+      }
+    };
+    reader.onerror = () => toast('文件读取失败，请重试');
+    reader.readAsArrayBuffer(file);
+    return;
+  }
+
+  // 情况 B：XLSX 未加载，但是 CSV → 直接解析
+  if (isCsv) {
+    const reader = new FileReader();
+    reader.onload = e => {
+      try {
+        const rows = parseCSV(e.target.result);
+        importRowsFromArray(rows, file.name);
+      } catch (err) {
+        console.error(err);
+        toast('CSV 解析失败：' + err.message);
+      }
+    };
+    reader.readAsText(file, 'UTF-8');
+    return;
+  }
+
+  // 情况 C：XLSX 未加载，用户传 .xlsx
+  alert(
+    '📋 Excel 解析库未能加载（可能是网络问题）\n\n' +
+    '解决方案（任选其一）：\n' +
+    '1️⃣ 刷新页面重试（推荐先试这个）\n' +
+    '2️⃣ 用 Excel 打开文件 → 另存为「CSV UTF-8(逗号分隔)」→ 重新导入 CSV\n' +
+    '3️⃣ 改用「微信群成员导入」文本框方式手动粘贴名单\n\n' +
+    'CSV 文件本系统可完美解析，不影响功能。'
+  );
+}
+
+function importRowsFromArray(rows, fileName) {
+  if (!rows || rows.length === 0) { toast('文件内容为空'); return; }
+
+  let headerRow = -1, nameCol = 0, noCol = -1, clsCol = -1;
+  for (let i = 0; i < Math.min(rows.length, 5); i++) {
+    const row = (rows[i] || []).map(c => String(c == null ? '' : c).trim());
+    const ni = row.findIndex(c => /^(姓名|名字|学生姓名|name)$/i.test(c));
+    if (ni >= 0) {
+      headerRow = i; nameCol = ni;
+      noCol  = row.findIndex(c => /^(学号|学籍号|编号|no|id)$/i.test(c));
+      clsCol = row.findIndex(c => /^(班级|小组|组别|class)$/i.test(c));
+      break;
+    }
+  }
+
+  const startIdx = headerRow >= 0 ? headerRow + 1 : 0;
+  const parsed = [];
+  const seen = new Set();
+
+  for (let i = startIdx; i < rows.length; i++) {
+    const row = rows[i] || [];
+    if (row.length === 0) continue;
+    const name = String(row[nameCol] == null ? '' : row[nameCol]).trim();
+    if (!name || name.length > 20) continue;
+    if (seen.has(name)) continue;
+    seen.add(name);
+    parsed.push({
+      name,
+      studentNo: noCol >= 0 ? String(row[noCol] == null ? '' : row[noCol]).trim() : '',
+      className: clsCol >= 0 ? String(row[clsCol] == null ? '' : row[clsCol]).trim() : ''
+    });
+  }
+
+  if (parsed.length === 0) {
+    toast('未解析到有效学生数据，请检查表头是否为「姓名」');
+    return;
+  }
+
+  const existingNames = new Set(students.map(s => s.name));
+  let added = 0, skipped = 0;
+  parsed.forEach(p => {
+    if (existingNames.has(p.name)) { skipped++; return; }
+    students.push({ id: uid(), name: p.name, studentNo: p.studentNo, className: p.className });
+    existingNames.add(p.name);
+    added++;
+  });
+  save(); renderAll();
+  toast(`导入成功 ${added} 人${skipped ? `，跳过重复 ${skipped} 人` : ''}`);
+}
+
+/* 轻量 CSV 解析器（支持引号、逗号、换行） */
+function parseCSV(text) {
+  if (text.charCodeAt(0) === 0xFEFF) text = text.slice(1);
+  const rows = [];
+  let row = [], cur = '', inQuote = false;
+  for (let i = 0; i < text.length; i++) {
+    const ch = text[i], next = text[i + 1];
+    if (inQuote) {
+      if (ch === '"' && next === '"') { cur += '"'; i++; }
+      else if (ch === '"') { inQuote = false; }
+      else cur += ch;
+    } else {
+      if (ch === '"') inQuote = true;
+      else if (ch === ',') { row.push(cur); cur = ''; }
+      else if (ch === '\r') {}
+      else if (ch === '\n') { row.push(cur); rows.push(row); row = []; cur = ''; }
+      else cur += ch;
+    }
+  }
+  if (cur !== '' || row.length > 0) { row.push(cur); rows.push(row); }
+  return rows;
+}
+
+/* ================= 导出 ================= */
+function exportExcel() {
+  if (typeof XLSX === 'undefined') { exportAsCSV(); return; }
+  if (students.length === 0 && records.length === 0) { toast('暂无数据可导出'); return; }
+
+  const rows = [['序号','姓名','学号','班级/小组','点名方式','出勤状态','点名时间']];
+  const recordedIds = new Set(records.map(r => r.studentId));
+  let idx = 1;
+  records.forEach(r => {
+    rows.push([idx++, r.name, r.studentNo || '', r.className || '',
+      r.mode === 'random' ? '随机' : '顺序',
+      r.status ? STATUS_MAP[r.status].text : '未标记', r.time]);
+  });
+  students.filter(s => !recordedIds.has(s.id)).forEach(s => {
+    rows.push([idx++, s.name, s.studentNo || '', s.className || '', '-', '未点名', '']);
+  });
+  const ws1 = XLSX.utils.aoa_to_sheet(rows);
+  ws1['!cols'] = [{wch:6},{wch:12},{wch:15},{wch:16},{wch:10},{wch:10},{wch:21}];
+
+  const counts = { present:0, absent:0, late:0, leave:0, none:0 };
+  records.forEach(r => {
+    if (r.status && counts[r.status] !== undefined) counts[r.status]++;
+    else counts.none++;
+  });
+  const sumRows = [
+    ['统计项','数值'],
+    ['学生总数', students.length],
+    ['本轮已点名', records.length],
+    ['出勤', counts.present],
+    ['缺勤', counts.absent],
+    ['迟到', counts.late],
+    ['请假', counts.leave],
+    ['未标记状态', counts.none],
+    ['未点到人数', Math.max(0, students.length - records.length)],
+    ['导出时间', nowStr()]
+  ];
+  const ws2 = XLSX.utils.aoa_to_sheet(sumRows);
+  ws2['!cols'] = [{wch:15},{wch:22}];
+
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws1, '出勤报表');
+  XLSX.utils.book_append_sheet(wb, ws2, '汇总');
+  XLSX.writeFile(wb, `点名报表_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  toast('报表已导出');
+}
+
+function exportAsCSV() {
+  if (students.length === 0 && records.length === 0) { toast('暂无数据可导出'); return; }
+  const esc = v => {
+    const s = String(v == null ? '' : v);
+    return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+  };
+  const lines = [];
+  lines.push(['序号','姓名','学号','班级/小组','点名方式','出勤状态','点名时间'].map(esc).join(','));
+  const recordedIds = new Set(records.map(r => r.studentId));
+  let idx = 1;
+  records.forEach(r => {
+    lines.push([idx++, r.name, r.studentNo || '', r.className || '',
+      r.mode === 'random' ? '随机' : '顺序',
+      r.status ? STATUS_MAP[r.status].text : '未标记', r.time].map(esc).join(','));
+  });
+  students.filter(s => !recordedIds.has(s.id)).forEach(s => {
+    lines.push([idx++, s.name, s.studentNo || '', s.className || '', '-', '未点名', ''].map(esc).join(','));
+  });
+  const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `点名报表_${new Date().toISOString().slice(0, 10)}.csv`;
+  document.body.appendChild(a); a.click();
+  document.body.removeChild(a); URL.revokeObjectURL(url);
+  toast('已导出 CSV（Excel 可直接打开）');
+}
+
+function exportStudentList() {
+  if (students.length === 0) { toast('名单为空'); return; }
+
+  if (typeof XLSX === 'undefined') {
+    // CSV 兜底
+    const esc = v => {
+      const s = String(v == null ? '' : v);
+      return /[",\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s;
+    };
+    const lines = [['序号','姓名','学号','班级/小组'].map(esc).join(',')];
+    students.forEach((s, i) => lines.push([i + 1, s.name, s.studentNo || '', s.className || ''].map(esc).join(',')));
+    const blob = new Blob(['\uFEFF' + lines.join('\r\n')], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `学生名单_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a); a.click();
+    document.body.removeChild(a); URL.revokeObjectURL(url);
+    toast('已导出 CSV 名单');
+    return;
+  }
+
+  const rows = [['序号','姓名','学号','班级/小组']];
+  students.forEach((s, i) => rows.push([i + 1, s.name, s.studentNo || '', s.className || '']));
+  const ws = XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols'] = [{wch:6},{wch:12},{wch:15},{wch:16}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, '学生名单');
+  XLSX.writeFile(wb, `学生名单_${new Date().toISOString().slice(0, 10)}.xlsx`);
+  toast('名单已导出');
+}
+
+/* ================= 页面切换 & 事件绑定 ================= */
+function switchPage(name) {
+  $$('.page').forEach(p => p.classList.remove('active'));
+  const target = $('#page-' + name);
+  if (target) target.classList.add('active');
+  $$('.tab-btn').forEach(b => b.classList.toggle('active', b.dataset.page === name));
+  window.scrollTo({ top: 0, behavior: 'smooth' });
+}
+
+function bindEvents() {
+  $$('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => switchPage(btn.dataset.page));
+  });
+
+  $$('.mode-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      mode = btn.dataset.mode;
+      $$('.mode-btn').forEach(b => b.classList.toggle('active', b === btn));
+      pickedIds = []; currentStudentId = null; currentRecordId = null;
+      $('#pickName').textContent = '准备就绪';
+      $('#pickMeta').textContent = mode === 'random'
+        ? '随机模式 · 点击开始点名'
+        : '顺序模式 · 按名单顺序点名';
+      $('#pickBtn').textContent = '开 始 点 名';
+      $('#statusGrid').classList.remove('show');
+      save(); renderAll();
+      toast(mode === 'random' ? '已切换：随机点名' : '已切换：顺序点名');
+    });
+  });
+
+  $('#pickBtn').addEventListener('click', doPick);
+
+  $$('.status-btn').forEach(btn => {
+    btn.addEventListener('click', () => markStatus(btn.dataset.status));
+  });
+
+  $('#resetRound').addEventListener('click', resetRound);
+
+  $('#addBtn').addEventListener('click', addStudent);
+  $('#addName').addEventListener('keydown', e => { if (e.key === 'Enter') addStudent(); });
+  $('#addNo').addEventListener('keydown', e => { if (e.key === 'Enter') addStudent(); });
+  $('#stuSearch').addEventListener('input', renderStudents);
+
+  $('#studentList').addEventListener('click', e => {
+    const delBtn = e.target.closest('[data-del]');
+    const editBtn = e.target.closest('[data-edit]');
+    if (delBtn) deleteStudent(delBtn.dataset.del);
+    if (editBtn) editStudent(editBtn.dataset.edit);
+  });
+
+  $('#clearStuBtn').addEventListener('click', clearStudents);
+  $('#exportStuBtn').addEventListener('click', exportStudentList);
+
+  $('#parseWechatBtn').addEventListener('click', () => {
+    const text = $('#wechatText').value;
+    if (!text.trim()) { toast('请先粘贴群成员文本'); return; }
+    const parsed = parseWechatMembers(text);
+    if (parsed.length === 0) { toast('未解析到有效姓名，请检查粘贴内容'); return; }
+    importPreview = parsed;
+    renderImportPreview();
+    toast(`解析出 ${parsed.length} 位成员，请确认后导入`);
+    setTimeout(() => {
+      $('#previewCard').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 120);
+  });
+
+  $('#clearWechatBtn').addEventListener('click', () => {
+    $('#wechatText').value = '';
+    importPreview = [];
+    renderImportPreview();
+  });
+
+  $('#importPreview').addEventListener('click', e => {
+    const cb = e.target.closest('input[data-act="check"]');
+    if (cb) {
+      importPreview[+cb.dataset.idx].checked = cb.checked;
+    }
+  });
+  $('#importPreview').addEventListener('input', e => {
+    const inp = e.target.closest('input[data-act="name"]');
+    if (inp) importPreview[+inp.dataset.idx].name = inp.value;
+  });
+
+  $('#prevAll').addEventListener('click', () => {
+    importPreview.forEach(x => x.checked = true); renderImportPreview();
+  });
+  $('#prevNone').addEventListener('click', () => {
+    importPreview.forEach(x => x.checked = false); renderImportPreview();
+  });
+  $('#confirmImport').addEventListener('click', confirmImport);
+
+  $('#excelBtn').addEventListener('click', () => $('#excelFile').click());
+  $('#excelFile').addEventListener('change', e => {
+    const f = e.target.files && e.target.files[0];
+    if (f) handleExcelFile(f);
+    e.target.value = '';
+  });
+
+  $('#exportBtn').addEventListener('click', exportExcel);
+  $('#clearRecords').addEventListener('click', resetRound);
+}
+
+/* ================= 启动 ================= */
+function init() {
+  load();
+  bindEvents();
+
+  $$('.mode-btn').forEach(b => b.classList.toggle('active', b.dataset.mode === mode));
+
+  renderAll();
+  renderImportPreview();
+
+  if (records.length > 0) {
+    const last = records[records.length - 1];
+    const stu = students.find(s => s.id === last.studentId);
+    if (stu) {
+      currentStudentId = stu.id;
+      currentRecordId = last.id;
+      showCurrent(stu);
+      if (last.status) $('#pickMeta').textContent += '（已标记）';
+    }
+  }
+
+  if (students.length === 0) {
+    setTimeout(() => toast('欢迎使用！先去「导入」页添加学生名单 👉', 3200), 700);
+  }
+
+  // 更新 XLSX 加载状态提示
+  const statusEl = $('#xlsxStatus');
+  if (statusEl) {
+    setTimeout(() => {
+      if (typeof XLSX !== 'undefined') {
+        statusEl.innerHTML = '✅ Excel 组件已就绪（支持 .xlsx / .xls / .csv）';
+        statusEl.style.color = '#15803d';
+      } else if (window.__XLSX_LOAD_FAILED__) {
+        statusEl.innerHTML = '⚠️ Excel 组件加载失败，请改用 <b>CSV 格式</b>（Excel 另存为 CSV 即可），功能完整可用。';
+        statusEl.style.color = '#b45309';
+      } else {
+        statusEl.innerHTML = '⏳ 正在加载 Excel 组件…';
+        statusEl.style.color = '#6b7280';
+      }
+    }, 1500);
+  }
+}
+
+document.addEventListener('DOMContentLoaded', init);
+</script>
+</body>
+</html>
